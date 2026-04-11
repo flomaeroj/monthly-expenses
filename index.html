@@ -50,15 +50,33 @@
     z-index: 100;
     padding: 12px 16px 0;
   }
+  #month-strip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
   #month-strip {
     display: flex;
+    flex-direction: column;
     gap: 6px;
-    overflow-x: auto;
-    scrollbar-width: none;
     margin-bottom: 10px;
+  }
+  .month-year-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
     align-items: center;
   }
-  #month-strip::-webkit-scrollbar { display: none; }
+  .month-year-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    font-weight: 600;
+    flex-shrink: 0;
+    min-width: 32px;
+  }
   .month-btn {
     padding: 4px 12px;
     border-radius: 20px;
@@ -271,9 +289,11 @@
 <!-- HEADER -->
 <div id="header">
   <div style="max-width:860px;margin:0 auto;">
-    <div id="month-strip">
+    <div id="month-strip-header">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600">Months</div>
       <button id="add-month-btn" onclick="openModal('modal-new-month')">+ Month</button>
     </div>
+    <div id="month-strip"></div>
     <div id="totals-row">
       <div>
         <div class="total-label" id="active-month-label">—</div>
@@ -594,14 +614,77 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="modal-edit-trip-exp">
+  <div class="modal">
+    <div class="modal-title">Edit Vacation Expense</div>
+    <div class="field">
+      <label>Category</label>
+      <select id="edit-trip-exp-category">
+        <option value="Shopping">🛍️ Shopping</option>
+        <option value="Food">🍜 Food & Drinks</option>
+        <option value="Activities">🎡 Activities</option>
+        <option value="Flight">✈️ Flight Tickets</option>
+        <option value="Hotel">🏨 Hotel / Accommodation</option>
+        <option value="Transport">🚗 Local Transport</option>
+        <option value="Other">📦 Other</option>
+      </select>
+    </div>
+    <div class="field"><label>Description (optional)</label><input type="text" id="edit-trip-exp-desc" placeholder="e.g. Dinner at local restaurant..."/></div>
+    <div class="field"><label>Amount</label><div class="dollar-wrap"><input type="number" id="edit-trip-exp-amount" placeholder="0.00"/></div></div>
+    <div class="field"><label>Date</label><input type="text" id="edit-trip-exp-date" placeholder="e.g. Apr 5"/></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-trip-exp')">Cancel</button>
+      <button class="btn btn-teal" onclick="saveEditTripExp()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="modal-trip-exp">
   <div class="modal">
     <div class="modal-title">Add Vacation Expense</div>
-    <div class="field"><label>Description</label><input type="text" id="trip-exp-desc" placeholder="Hotel, flights, food..."/></div>
-    <div class="field"><label>Amount</label><div class="dollar-wrap"><input type="number" id="trip-exp-amount"/></div></div>
+    <div class="field">
+      <label>Category</label>
+      <select id="trip-exp-category">
+        <option value="Shopping">🛍️ Shopping</option>
+        <option value="Food">🍜 Food & Drinks</option>
+        <option value="Activities">🎡 Activities</option>
+        <option value="Flight">✈️ Flight Tickets</option>
+        <option value="Hotel">🏨 Hotel / Accommodation</option>
+        <option value="Transport">🚗 Local Transport</option>
+        <option value="Other">📦 Other</option>
+      </select>
+    </div>
+    <div class="field"><label>Description (optional)</label><input type="text" id="trip-exp-desc" placeholder="e.g. Dinner at local restaurant, Nike store..."/></div>
+    <div class="field"><label>Amount</label><div class="dollar-wrap"><input type="number" id="trip-exp-amount" placeholder="0.00"/></div></div>
     <div class="btn-row">
       <button class="btn btn-ghost" onclick="closeModal('modal-trip-exp')">Cancel</button>
       <button class="btn btn-teal" onclick="saveTripExp()">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-edit-bill">
+  <div class="modal">
+    <div class="modal-title">Edit Bill Amount</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:-4px" id="edit-bill-name-label"></div>
+    <div class="field"><label>Amount this month</label><div class="dollar-wrap"><input type="number" id="edit-bill-amount" placeholder="0.00"/></div></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-bill')">Cancel</button>
+      <button class="btn btn-ghost" onclick="resetBill(editBillData&&editBillData.id)" style="color:var(--muted)">Reset Default</button>
+      <button class="btn btn-accent" onclick="saveEditBill()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-edit-vault">
+  <div class="modal">
+    <div class="modal-title">Edit Vault Amount</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:-4px" id="edit-vault-name-label"></div>
+    <div class="field"><label>Amount this month</label><div class="dollar-wrap"><input type="number" id="edit-vault-amount" placeholder="0.00"/></div></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-vault')">Cancel</button>
+      <button class="btn btn-ghost" onclick="resetVault(editVaultData&&editVaultData.id)" style="color:var(--muted)">Reset Default</button>
+      <button class="btn btn-green" onclick="saveEditVault()">Save</button>
     </div>
   </div>
 </div>
@@ -647,6 +730,8 @@ const DESC_OPTIONS = {
 const newMonthData = () => ({
   budget:     FIXED_BUDGET.map(b=>({...b,spent:0,entries:[]})),
   misc:[], extraBills:[], trips:[], income:[],
+  billOverrides:{},   // {billId: amount}
+  vaultOverrides:{},  // {vaultId: amount}
 });
 
 // ══ STATE ══
@@ -657,6 +742,9 @@ let incomeType = 'Pay';
 let logSpendBudgetId = null;
 let editEntryData = null;
 let tripExpTripId = null;
+let editTripExpData = null; // {tripId, expId}
+let editBillData = null;   // {id, name, isFixed}
+let editVaultData = null;  // {id, name}
 let calOpenId = null;
 let calNav = {};
 let charts = {};
@@ -682,11 +770,12 @@ const monthLabel = key => { const [y,m]=key.split('-'); return `${MONTHS[parseIn
 const today = new Date();
 const todayStr = today.toDateString();
 const md = () => state[activeMonth] || newMonthData();
-const allBills = () => [...FIXED_BILLS,...(md().extraBills||[])];
+const allBills = () => [...FIXED_BILLS,...(md().extraBills||[])].map(b=>({...b, amount: (md().billOverrides||{})[b.id] ?? b.amount}));
 const totalBills = () => allBills().reduce((s,b)=>s+b.amount,0);
 const totalBudget = () => md().budget.reduce((s,b)=>s+b.budget,0);
 const totalBudgetSpent = () => md().budget.reduce((s,b)=>s+b.spent,0)+(md().misc||[]).reduce((s,m)=>s+m.amount,0);
-const totalVaults = () => FIXED_VAULTS.reduce((s,v)=>s+v.monthly,0);
+const vaultAmount = v => (md().vaultOverrides||{})[v.id] ?? v.monthly;
+const totalVaults = () => FIXED_VAULTS.reduce((s,v)=>s+vaultAmount(v),0);
 const totalMonthly = () => totalBills()+totalBudget()+totalVaults()+625;
 const totalIncome = () => (md().income||[]).reduce((s,i)=>s+i.amount,0);
 const progColor = pct => pct>90?'var(--red)':pct>70?'var(--gold)':'var(--green)';
@@ -850,22 +939,48 @@ function delTrip(id) { const d=md(); d.trips=(d.trips||[]).filter(t=>t.id!==id);
 function toggleCal(id) { calOpenId=calOpenId===id?null:id; renderTab('vacation'); }
 function openTripExp(id) {
   tripExpTripId=id;
+  document.getElementById('trip-exp-category').value='Shopping';
   document.getElementById('trip-exp-desc').value='';
   document.getElementById('trip-exp-amount').value='';
   openModal('modal-trip-exp');
 }
 function saveTripExp() {
+  const category=document.getElementById('trip-exp-category').value;
   const desc=document.getElementById('trip-exp-desc').value.trim();
   const amt=parseFloat(document.getElementById('trip-exp-amount').value);
-  if(!desc||!amt) return;
+  if(!amt) return;
+  const name=desc?`${category} — ${desc}`:category;
   const t=md().trips.find(t=>t.id===tripExpTripId);
-  if(t) t.expenses.push({id:Date.now(),name:desc,amount:amt,date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})});
+  if(t) t.expenses.push({id:Date.now(),name,category,desc,amount:amt,date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})});
   closeModal('modal-trip-exp'); save(); renderAll();
 }
 function delTripExp(tripId,expId) {
   const t=md().trips.find(t=>t.id===tripId);
   if(t) t.expenses=t.expenses.filter(e=>e.id!==expId);
   save(); renderAll();
+}
+function openEditTripExp(tripId,expId) {
+  const t=md().trips.find(t=>t.id===tripId);
+  const e=(t.expenses||[]).find(e=>e.id===expId);
+  if(!e) return;
+  editTripExpData={tripId,expId};
+  document.getElementById('edit-trip-exp-category').value=e.category||'Other';
+  document.getElementById('edit-trip-exp-desc').value=e.desc||'';
+  document.getElementById('edit-trip-exp-amount').value=e.amount;
+  document.getElementById('edit-trip-exp-date').value=e.date||'';
+  openModal('modal-edit-trip-exp');
+}
+function saveEditTripExp() {
+  if(!editTripExpData) return;
+  const category=document.getElementById('edit-trip-exp-category').value;
+  const desc=document.getElementById('edit-trip-exp-desc').value.trim();
+  const amt=parseFloat(document.getElementById('edit-trip-exp-amount').value);
+  const date=document.getElementById('edit-trip-exp-date').value.trim();
+  if(!amt) return;
+  const name=desc?`${category} — ${desc}`:category;
+  const t=md().trips.find(t=>t.id===editTripExpData.tripId);
+  if(t) t.expenses=t.expenses.map(e=>e.id===editTripExpData.expId?{...e,category,desc,name,amount:amt,date}:e);
+  closeModal('modal-edit-trip-exp'); save(); renderAll();
 }
 function handleCalDay(tripId,y,m,d) {
   const t=md().trips.find(t=>t.id===tripId);
@@ -893,19 +1008,84 @@ function navCal(tripId,dir) {
   renderTab('vacation');
 }
 
+// ══ EDIT BILL AMOUNT ══
+function openEditBill(id, name, currentAmount) {
+  editBillData={id,name};
+  document.getElementById('edit-bill-name-label').textContent=name;
+  document.getElementById('edit-bill-amount').value=currentAmount;
+  openModal('modal-edit-bill');
+}
+function saveEditBill() {
+  const amt=parseFloat(document.getElementById('edit-bill-amount').value);
+  if(!amt||!editBillData) return;
+  const d=md();
+  if(!d.billOverrides) d.billOverrides={};
+  d.billOverrides[editBillData.id]=amt;
+  closeModal('modal-edit-bill'); save(); renderAll();
+}
+function resetBill(id) {
+  const d=md();
+  if(d.billOverrides) delete d.billOverrides[id];
+  closeModal('modal-edit-bill'); save(); renderAll();
+}
+
+// ══ EDIT VAULT AMOUNT ══
+function openEditVault(id, name, currentAmount) {
+  editVaultData={id,name};
+  document.getElementById('edit-vault-name-label').textContent=name;
+  document.getElementById('edit-vault-amount').value=currentAmount;
+  openModal('modal-edit-vault');
+}
+function saveEditVault() {
+  const amt=parseFloat(document.getElementById('edit-vault-amount').value);
+  if(!amt||!editVaultData) return;
+  const d=md();
+  if(!d.vaultOverrides) d.vaultOverrides={};
+  d.vaultOverrides[editVaultData.id]=amt;
+  closeModal('modal-edit-vault'); save(); renderAll();
+}
+function resetVault(id) {
+  const d=md();
+  if(d.vaultOverrides) delete d.vaultOverrides[id];
+  closeModal('modal-edit-vault'); save(); renderAll();
+}
+
 // ══ RENDER ══
 function renderAll() { renderMonthStrip(); renderHeader(); renderTab(activeTab); }
 
 function renderMonthStrip() {
   const strip=document.getElementById('month-strip');
-  strip.querySelectorAll('.month-btn').forEach(b=>b.remove());
-  const addBtn=document.getElementById('add-month-btn');
-  Object.keys(state).sort().reverse().forEach(key=>{
-    const btn=document.createElement('button');
-    btn.className='month-btn'+(key===activeMonth?' active':'');
-    btn.textContent=monthLabel(key);
-    btn.onclick=()=>switchActiveMonth(key);
-    strip.insertBefore(btn,addBtn);
+  strip.innerHTML='';
+
+  // group keys by year
+  const byYear={};
+  Object.keys(state).sort().forEach(key=>{
+    const [y]=key.split('-');
+    if(!byYear[y]) byYear[y]=[];
+    byYear[y].push(key);
+  });
+
+  // render one row per year, newest year first
+  Object.keys(byYear).sort().reverse().forEach(year=>{
+    const row=document.createElement('div');
+    row.className='month-year-group';
+
+    const yearLabel=document.createElement('span');
+    yearLabel.className='month-year-label';
+    yearLabel.textContent=year;
+    row.appendChild(yearLabel);
+
+    // months newest first within the year
+    byYear[year].slice().reverse().forEach(key=>{
+      const [,m]=key.split('-');
+      const btn=document.createElement('button');
+      btn.className='month-btn'+(key===activeMonth?' active':'');
+      btn.textContent=MONTHS[parseInt(m)-1].slice(0,3);
+      btn.onclick=()=>switchActiveMonth(key);
+      row.appendChild(btn);
+    });
+
+    strip.appendChild(row);
   });
 }
 
@@ -985,6 +1165,8 @@ function renderOverview() {
       const pct=tB>0?Math.min(100,Math.round((tS/tB)*100)):0;
       const sd=t.startDate?new Date(t.startDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
       const ed=t.endDate?new Date(t.endDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+      
+      
       tl.innerHTML+=`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:12px;font-weight:600">${t.destination}</span>${tB>0?`<span style="font-size:11px;color:var(--muted)">${fmt(tS)} / ${fmt(tB)}</span>`:''}</div>${sd?`<div style="font-size:10px;color:var(--teal);margin-bottom:4px">${sd}${ed?' — '+ed:''}</div>`:''}${tB>0?`<div class="prog-wrap" style="height:5px"><div class="prog-bar" style="width:${pct}%;background:var(--teal)"></div></div>`:''}</div>`;
     });
   } else { tCard.style.display='none'; }
@@ -1126,16 +1308,19 @@ function renderBills() {
   const list=document.getElementById('bills-list'); list.innerHTML='';
   bills.forEach((b,i)=>{
     const isFixed=FIXED_BILLS.find(f=>f.id===b.id);
-    list.innerHTML+=`<div class="card card-sm" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:start"><div style="display:flex;align-items:start;gap:10px;flex:1"><div style="width:10px;height:10px;border-radius:3px;background:${BILL_COLORS[i%BILL_COLORS.length]};flex-shrink:0;margin-top:4px"></div><div><div style="font-weight:600;font-size:14px">${b.name}</div><div style="font-size:11px;color:var(--muted);margin-top:1px">${b.category} · ${b.account}</div>${b.desc?`<div style="font-size:11px;color:var(--muted);margin-top:2px;font-style:italic">${b.desc}</div>`:''}</div></div><div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:10px"><div style="font-size:15px;font-weight:700">${fmt(b.amount)}</div>${!isFixed?`<button class="btn btn-red btn-sm" onclick="delBill(${b.id})">✕</button>`:''}</div></div></div>`;
+    const isOverridden=(md().billOverrides||{})[b.id]!==undefined;
+    list.innerHTML+=`<div class="card card-sm" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:start"><div style="display:flex;align-items:start;gap:10px;flex:1"><div style="width:10px;height:10px;border-radius:3px;background:${BILL_COLORS[i%BILL_COLORS.length]};flex-shrink:0;margin-top:4px"></div><div><div style="font-weight:600;font-size:14px">${b.name}</div><div style="font-size:11px;color:var(--muted);margin-top:1px">${b.category} · ${b.account}</div>${b.desc?`<div style="font-size:11px;color:var(--muted);margin-top:2px;font-style:italic">${b.desc}</div>`:''}${isOverridden?`<div style="font-size:10px;color:var(--gold);margin-top:2px">Modified this month</div>`:''}</div></div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:10px"><div style="font-size:15px;font-weight:700">${fmt(b.amount)}</div><button class="btn btn-sm" style="background:rgba(91,138,240,.2);color:var(--accent)" onclick="openEditBill(${b.id},'${b.name.replace(/'/g,"\\'")}',${b.amount})">✎</button>${!isFixed?`<button class="btn btn-red btn-sm" onclick="delBill(${b.id})">✕</button>`:''}</div></div></div>`;
   });
 }
 
 function renderSavings() {
-  const total=FIXED_VAULTS.reduce((s,v)=>s+v.monthly,0);
+  const total=totalVaults();
   document.getElementById('savings-total').innerHTML=fmt(total)+' <span style="font-size:13px;color:var(--muted);font-weight:400">/mo</span>';
   const list=document.getElementById('savings-list'); list.innerHTML='';
   FIXED_VAULTS.forEach(v=>{
-    list.innerHTML+=`<div class="card card-sm" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="display:flex;align-items:center;gap:12px"><div style="width:10px;height:10px;border-radius:3px;background:${v.color};flex-shrink:0"></div><div style="font-weight:600;font-size:14px">${v.name}</div></div><div style="font-size:16px;font-weight:800;color:${v.color}">${fmt(v.monthly)}<span style="font-size:11px;color:var(--muted);font-weight:400">/mo</span></div></div>`;
+    const amt=vaultAmount(v);
+    const isOverridden=(md().vaultOverrides||{})[v.id]!==undefined;
+    list.innerHTML+=`<div class="card card-sm" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="display:flex;align-items:center;gap:12px"><div style="width:10px;height:10px;border-radius:3px;background:${v.color};flex-shrink:0"></div><div><div style="font-weight:600;font-size:14px">${v.name}</div>${isOverridden?`<div style="font-size:10px;color:var(--gold);margin-top:1px">Modified this month</div>`:''}</div></div><div style="display:flex;align-items:center;gap:8px"><div style="font-size:16px;font-weight:800;color:${v.color}">${fmt(amt)}<span style="font-size:11px;color:var(--muted);font-weight:400">/mo</span></div><button class="btn btn-sm" style="background:rgba(61,214,140,.15);color:var(--green)" onclick="openEditVault(${v.id},'${v.name}',${amt})">✎</button></div></div>`;
   });
 }
 
@@ -1194,7 +1379,8 @@ function renderVacation() {
 
     let expsHtml='';
     (t.expenses||[]).forEach(e=>{
-      expsHtml+=`<div class="entry-row" style="margin-bottom:5px"><div><div class="entry-name">${e.name}</div><div class="entry-date">${e.date}</div></div><div style="display:flex;align-items:center;gap:7px"><div class="entry-amount" style="color:var(--teal)">${fmt(e.amount)}</div><button class="btn btn-red btn-sm" onclick="delTripExp(${t.id},${e.id})">✕</button></div></div>`;
+      const catEmoji={'Shopping':'🛍️','Food':'🍜','Activities':'🎡','Flight':'✈️','Hotel':'🏨','Transport':'🚗','Other':'📦'};
+      expsHtml+=`<div class="entry-row" style="margin-bottom:5px"><div style="flex:1;min-width:0"><div class="entry-name" style="display:flex;align-items:center;gap:5px"><span style="font-size:11px">${catEmoji[e.category]||'📦'}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.category}</span></div>${e.desc?`<div class="entry-date" style="margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.desc}</div>`:''}<div class="entry-date">${e.date}</div></div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px"><div class="entry-amount" style="color:var(--teal)">${fmt(e.amount)}</div><button class="btn btn-sm" style="background:rgba(56,189,248,.2);color:var(--teal)" onclick="openEditTripExp(${t.id},${e.id})">✎</button><button class="btn btn-red btn-sm" onclick="delTripExp(${t.id},${e.id})">✕</button></div></div>`;
     });
     const expTotal=(t.expenses||[]).reduce((s,e)=>s+e.amount,0);
 
