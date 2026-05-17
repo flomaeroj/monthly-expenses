@@ -538,9 +538,12 @@
     <div class="modal-title" id="log-spend-title">Log Spend</div>
     <div style="font-size:12px;color:var(--muted)" id="log-spend-sub"></div>
     <div class="field">
-      <label>Description</label>
+      <label>Category</label>
       <select id="log-spend-desc-sel" onchange="handleDescSel()"><option value="">Select a description...</option></select>
-      <input type="text" id="log-spend-desc-custom" placeholder="Describe this expense..." style="margin-top:6px;display:none"/>
+    </div>
+    <div class="field">
+      <label>Specific Description (optional)</label>
+      <input type="text" id="log-spend-desc-custom" placeholder="e.g. Chipotle, Shell on Main St..."/>
     </div>
     <div class="field"><label>Amount</label><div class="dollar-wrap"><input type="number" id="log-spend-amount" placeholder="0.00"/></div></div>
     <div class="btn-row">
@@ -667,7 +670,8 @@
   <div class="modal">
     <div class="modal-title">Edit Bill Amount</div>
     <div style="font-size:13px;color:var(--muted);margin-top:-4px" id="edit-bill-name-label"></div>
-    <div class="field"><label>Amount this month</label><div class="dollar-wrap"><input type="number" id="edit-bill-amount" placeholder="0.00"/></div></div>
+    <div style="font-size:11px;color:var(--muted);background:rgba(91,138,240,.1);border-radius:8px;padding:8px 10px;border:1px solid rgba(91,138,240,.2)">Saves as new default for all future months.</div>
+    <div class="field"><label>New Amount</label><div class="dollar-wrap"><input type="number" id="edit-bill-amount" placeholder="0.00"/></div></div>
     <div class="btn-row">
       <button class="btn btn-ghost" onclick="closeModal('modal-edit-bill')">Cancel</button>
       <button class="btn btn-ghost" onclick="resetBill(editBillData&&editBillData.id)" style="color:var(--muted)">Reset Default</button>
@@ -680,11 +684,27 @@
   <div class="modal">
     <div class="modal-title">Edit Vault Amount</div>
     <div style="font-size:13px;color:var(--muted);margin-top:-4px" id="edit-vault-name-label"></div>
-    <div class="field"><label>Amount this month</label><div class="dollar-wrap"><input type="number" id="edit-vault-amount" placeholder="0.00"/></div></div>
+    <div style="font-size:11px;color:var(--muted);background:rgba(61,214,140,.1);border-radius:8px;padding:8px 10px;border:1px solid rgba(61,214,140,.2)">Saves as new default for all future months.</div>
+    <div class="field"><label>New Amount</label><div class="dollar-wrap"><input type="number" id="edit-vault-amount" placeholder="0.00"/></div></div>
     <div class="btn-row">
       <button class="btn btn-ghost" onclick="closeModal('modal-edit-vault')">Cancel</button>
       <button class="btn btn-ghost" onclick="resetVault(editVaultData&&editVaultData.id)" style="color:var(--muted)">Reset Default</button>
       <button class="btn btn-green" onclick="saveEditVault()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-edit-budget">
+  <div class="modal">
+    <div class="modal-title">Edit Budget</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:-4px" id="edit-budget-name-label"></div>
+    <div style="font-size:11px;color:var(--muted);background:rgba(91,138,240,.1);border-radius:8px;padding:8px 10px;border:1px solid rgba(91,138,240,.2)">
+      This becomes the new default for all future months.
+    </div>
+    <div class="field"><label>New Budget Amount</label><div class="dollar-wrap"><input type="number" id="edit-budget-amount" placeholder="0.00"/></div></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-budget')">Cancel</button>
+      <button class="btn btn-accent" onclick="saveEditBudget()">Save as Default</button>
     </div>
   </div>
 </div>
@@ -728,7 +748,7 @@ const DESC_OPTIONS = {
 };
 
 const newMonthData = () => ({
-  budget:     FIXED_BUDGET.map(b=>({...b,spent:0,entries:[]})),
+  budget:     FIXED_BUDGET.map(b=>({...b,budget:budgetDefaults[b.id]??b.budget,spent:0,entries:[]})),
   misc:[], extraBills:[], trips:[], income:[],
   billOverrides:{},   // {billId: amount}
   vaultOverrides:{},  // {vaultId: amount}
@@ -753,10 +773,35 @@ let charts = {};
 function save() {
   try { localStorage.setItem('budget_v3', JSON.stringify({state, activeMonth})); } catch(e) {}
 }
+function saveBudgetDefaults() {
+  try { localStorage.setItem('budget_defaults', JSON.stringify(budgetDefaults)); } catch(e) {}
+}
+function saveBillDefaults() {
+  try { localStorage.setItem('bill_defaults', JSON.stringify(billDefaults)); } catch(e) {}
+}
+function saveVaultDefaults() {
+  try { localStorage.setItem('vault_defaults', JSON.stringify(vaultDefaults)); } catch(e) {}
+}
+let budgetDefaults = {}; // {id: budget amount} — persists globally
+let billDefaults = {};   // {billId: amount} — persists globally
+let vaultDefaults = {};  // {vaultId: amount} — persists globally
+
 function load() {
   try {
     const raw = localStorage.getItem('budget_v3');
     if (raw) { const d=JSON.parse(raw); state=d.state||{}; activeMonth=d.activeMonth||''; }
+  } catch(e) {}
+  try {
+    const bd = localStorage.getItem('budget_defaults');
+    if (bd) budgetDefaults = JSON.parse(bd);
+  } catch(e) {}
+  try {
+    const bld = localStorage.getItem('bill_defaults');
+    if (bld) billDefaults = JSON.parse(bld);
+  } catch(e) {}
+  try {
+    const vd = localStorage.getItem('vault_defaults');
+    if (vd) vaultDefaults = JSON.parse(vd);
   } catch(e) {}
   const today = new Date();
   const key = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
@@ -770,11 +815,11 @@ const monthLabel = key => { const [y,m]=key.split('-'); return `${MONTHS[parseIn
 const today = new Date();
 const todayStr = today.toDateString();
 const md = () => state[activeMonth] || newMonthData();
-const allBills = () => [...FIXED_BILLS,...(md().extraBills||[])].map(b=>({...b, amount: (md().billOverrides||{})[b.id] ?? b.amount}));
+const allBills = () => [...FIXED_BILLS,...(md().extraBills||[])].map(b=>({...b, amount: (md().billOverrides||{})[b.id] ?? billDefaults[b.id] ?? b.amount}));
 const totalBills = () => allBills().reduce((s,b)=>s+b.amount,0);
 const totalBudget = () => md().budget.reduce((s,b)=>s+b.budget,0);
 const totalBudgetSpent = () => md().budget.reduce((s,b)=>s+b.spent,0)+(md().misc||[]).reduce((s,m)=>s+m.amount,0);
-const vaultAmount = v => (md().vaultOverrides||{})[v.id] ?? v.monthly;
+const vaultAmount = v => (md().vaultOverrides||{})[v.id] ?? vaultDefaults[v.id] ?? v.monthly;
 const totalVaults = () => FIXED_VAULTS.reduce((s,v)=>s+vaultAmount(v),0);
 const totalMonthly = () => totalBills()+totalBudget()+totalVaults()+625;
 const totalIncome = () => (md().income||[]).reduce((s,i)=>s+i.amount,0);
@@ -839,21 +884,20 @@ function openLogSpend(budgetId) {
   sel.innerHTML='<option value="">Select a description...</option>';
   const opts=DESC_OPTIONS[b.name]||['Other'];
   opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; sel.appendChild(op); });
-  const co=document.createElement('option'); co.value='__custom__'; co.textContent='Type my own...'; sel.appendChild(co);
   sel.value='';
-  document.getElementById('log-spend-desc-custom').style.display='none';
   document.getElementById('log-spend-desc-custom').value='';
   document.getElementById('log-spend-amount').value='';
   openModal('modal-log-spend');
 }
 function handleDescSel() {
-  const v=document.getElementById('log-spend-desc-sel').value;
-  document.getElementById('log-spend-desc-custom').style.display=v==='__custom__'?'block':'none';
+  // Nothing to show/hide — custom field is always visible
 }
 function saveSpend() {
   const selVal=document.getElementById('log-spend-desc-sel').value;
   const custom=document.getElementById('log-spend-desc-custom').value.trim();
-  const desc=selVal==='__custom__'?custom:selVal;
+  // Combine: category from dropdown + specific detail from text field
+  let desc = selVal || '';
+  if (custom) desc = desc ? `${desc} — ${custom}` : custom;
   const amt=parseFloat(document.getElementById('log-spend-amount').value);
   if(!amt) return;
   const entry={id:Date.now(),desc,amount:amt,date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})};
@@ -908,6 +952,27 @@ function saveMisc() {
   closeModal('modal-misc'); save(); renderAll();
 }
 function delMisc(id) { const d=md(); d.misc=(d.misc||[]).filter(m=>m.id!==id); save(); renderAll(); }
+
+// ══ EDIT BUDGET DEFAULT ══
+let editBudgetId = null;
+function openEditBudget(id, name, currentBudget) {
+  editBudgetId = id;
+  document.getElementById('edit-budget-name-label').textContent = name;
+  document.getElementById('edit-budget-amount').value = currentBudget;
+  openModal('modal-edit-budget');
+}
+function saveEditBudget() {
+  const amt = parseFloat(document.getElementById('edit-budget-amount').value);
+  if (!amt || !editBudgetId) return;
+  // Save as global default
+  budgetDefaults[editBudgetId] = amt;
+  saveBudgetDefaults();
+  // Also update current month's budget immediately
+  const d = md();
+  d.budget = d.budget.map(b => b.id === editBudgetId ? {...b, budget: amt} : b);
+  closeModal('modal-edit-budget');
+  save(); renderAll();
+}
 
 // ══ BILLS ══
 function saveBill() {
@@ -1018,12 +1083,18 @@ function openEditBill(id, name, currentAmount) {
 function saveEditBill() {
   const amt=parseFloat(document.getElementById('edit-bill-amount').value);
   if(!amt||!editBillData) return;
+  // Save as global default — applies to all future months
+  billDefaults[editBillData.id]=amt;
+  saveBillDefaults();
+  // Also update current month override
   const d=md();
   if(!d.billOverrides) d.billOverrides={};
   d.billOverrides[editBillData.id]=amt;
   closeModal('modal-edit-bill'); save(); renderAll();
 }
 function resetBill(id) {
+  delete billDefaults[id];
+  saveBillDefaults();
   const d=md();
   if(d.billOverrides) delete d.billOverrides[id];
   closeModal('modal-edit-bill'); save(); renderAll();
@@ -1039,12 +1110,18 @@ function openEditVault(id, name, currentAmount) {
 function saveEditVault() {
   const amt=parseFloat(document.getElementById('edit-vault-amount').value);
   if(!amt||!editVaultData) return;
+  // Save as global default — applies to all future months
+  vaultDefaults[editVaultData.id]=amt;
+  saveVaultDefaults();
+  // Also update current month override
   const d=md();
   if(!d.vaultOverrides) d.vaultOverrides={};
   d.vaultOverrides[editVaultData.id]=amt;
   closeModal('modal-edit-vault'); save(); renderAll();
 }
 function resetVault(id) {
+  delete vaultDefaults[id];
+  saveVaultDefaults();
   const d=md();
   if(d.vaultOverrides) delete d.vaultOverrides[id];
   closeModal('modal-edit-vault'); save(); renderAll();
@@ -1052,6 +1129,23 @@ function resetVault(id) {
 
 // ══ RENDER ══
 function renderAll() { renderMonthStrip(); renderHeader(); renderTab(activeTab); }
+function toggleEntries(id, budgetId) {
+  const el=document.getElementById(id);
+  const chev=document.getElementById('chev-'+budgetId);
+  const isOpen=el.style.display==='flex';
+  el.style.display=isOpen?'none':'flex';
+  el.style.flexDirection='column';
+  if(chev) chev.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';
+}
+function toggleMisc() {
+  const el=document.getElementById('misc-entries');
+  const chev=document.getElementById('chev-misc');
+  const isOpen=el.style.display==='flex';
+  el.style.display=isOpen?'none':'flex';
+  el.style.flexDirection='column';
+  if(chev) chev.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';
+}
+
 
 function renderMonthStrip() {
   const strip=document.getElementById('month-strip');
@@ -1227,30 +1321,30 @@ function renderBudget() {
     const pct=b.budget>0?Math.round((b.spent/b.budget)*100):0;
     const col=progColor(pct);
     const entries=b.entries||[];
-    let eHtml='';
-    if(entries.length>0){
-      eHtml=`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:2px;display:flex;flex-direction:column;gap:5px">`;
-      entries.forEach(e=>{
-        eHtml+=`<div class="entry-row"><div style="flex:1;min-width:0"><div class="entry-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.desc||'<span style="color:var(--muted);font-style:italic">No description</span>'}</div><div class="entry-date">${e.date}</div></div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px"><div class="entry-amount">${fmt(e.amount)}</div><button class="btn btn-sm" style="background:rgba(91,138,240,.2);color:var(--accent)" onclick="openEditEntry(${b.id},${e.id})">✎</button><button class="btn btn-red btn-sm" onclick="delEntry(${b.id},${e.id})">✕</button></div></div>`;
-      });
-      eHtml+=`</div>`;
-    }
-    cards.innerHTML+=`<div class="card" style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px"><div><div style="font-weight:700;font-size:14px">${b.name}</div><div style="font-size:11px;color:var(--muted)">${b.category}</div></div><div style="text-align:right"><div style="font-size:15px;font-weight:800;color:${col}">${fmt(b.spent)}</div><div style="font-size:10px;color:var(--muted)">of ${fmt(b.budget)}</div></div></div><div class="prog-wrap" style="height:7px"><div class="prog-bar" style="width:${pct}%;background:${col}"></div></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><span style="font-size:11px;color:${col};font-weight:600">${pct}% · ${fmt(b.budget-b.spent)} left</span><button class="btn btn-sm" style="background:rgba(91,138,240,.2);color:var(--accent)" onclick="openLogSpend(${b.id})">+ Log</button></div>${eHtml}</div>`;
+    const detailId='entries-'+b.id;
+    let rowsHtml='';
+    entries.forEach(e=>{
+      rowsHtml+=`<div class="entry-row"><div style="flex:1;min-width:0"><div class="entry-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.desc||'<span style="color:var(--muted);font-style:italic">No description</span>'}</div><div class="entry-date">${e.date}</div></div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px"><div class="entry-amount">${fmt(e.amount)}</div><button class="btn btn-sm" style="background:rgba(91,138,240,.2);color:var(--accent)" onclick="openEditEntry(${b.id},${e.id})">\u270E</button><button class="btn btn-red btn-sm" onclick="delEntry(${b.id},${e.id})">\u2715</button></div></div>`;
+    });
+    const toggleBtn = entries.length>0 ? `<button onclick="toggleEntries('${detailId}',${b.id})" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:none;border-top:1px solid var(--border);padding:8px 12px;cursor:pointer;margin-top:8px;font-family:inherit;border-radius:0 0 10px 10px"><span style="font-size:11px;color:var(--muted);font-weight:600">${entries.length} item${entries.length>1?'s':''}</span><span id="chev-${b.id}" style="font-size:10px;color:var(--muted);transition:transform .25s;display:inline-block">&#9660;</span></button><div id="${detailId}" style="display:none;flex-direction:column;gap:5px;padding:8px 2px 4px">${rowsHtml}</div>` : '';
+    cards.innerHTML+=`<div class="card" style="margin-bottom:10px;padding-bottom:0;overflow:hidden"><div style="padding:14px 16px 0"><div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px"><div><div style="display:flex;align-items:center;gap:7px"><div style="font-weight:700;font-size:14px">${b.name}</div><button class="btn btn-sm" style="background:rgba(91,138,240,.15);color:var(--accent);padding:2px 8px;font-size:10px" onclick="openEditBudget(${b.id},'${b.name}',${b.budget})">✎</button></div><div style="font-size:11px;color:var(--muted)">${b.category}</div></div><div style="text-align:right"><div style="font-size:15px;font-weight:800;color:${col}">${fmt(b.spent)}</div><div style="font-size:10px;color:var(--muted)">of ${fmt(b.budget)}</div></div></div><div class="prog-wrap" style="height:7px"><div class="prog-bar" style="width:${pct}%;background:${col}"></div></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-bottom:14px"><span style="font-size:11px;color:${col};font-weight:600">${pct}% \u00b7 ${fmt(b.budget-b.spent)} left</span><button class="btn btn-sm" style="background:rgba(91,138,240,.2);color:var(--accent)" onclick="openLogSpend(${b.id})">+ Log</button></div></div>${toggleBtn}</div>`;
   });
 
   const misc=md().misc||[];
   const mList=document.getElementById('misc-list');
   const miscTotal=misc.reduce((s,m)=>s+m.amount,0);
-  if(misc.length===0){mList.innerHTML='<div class="card empty-state">No miscellaneous spending yet</div>';}
-  else{
-    mList.innerHTML='';
+  if(misc.length===0){
+    mList.innerHTML='<div class="card empty-state">No miscellaneous spending yet</div>';
+  } else {
+    // Build collapsible misc card
+    let rowsHtml='';
     misc.forEach(m=>{
-      mList.innerHTML+=`<div class="card card-sm" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div><div style="font-weight:600;font-size:13px">${m.name}</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${m.date}</div></div><div style="display:flex;align-items:center;gap:8px"><div style="font-size:14px;font-weight:700;color:var(--gold)">${fmt(m.amount)}</div><button class="btn btn-red btn-sm" onclick="delMisc(${m.id})">✕</button></div></div>`;
+      rowsHtml+=`<div class="entry-row"><div style="flex:1;min-width:0"><div class="entry-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.name}</div><div class="entry-date">${m.date}</div></div><div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px"><div style="font-size:14px;font-weight:700;color:var(--gold)">${fmt(m.amount)}</div><button class="btn btn-red btn-sm" onclick="delMisc(${m.id})">&#x2715;</button></div></div>`;
     });
+    mList.innerHTML=`<div class="card" style="padding-bottom:0;overflow:hidden"><div style="padding:12px 16px 0;display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:700">Total</span><span style="font-size:15px;font-weight:800;color:var(--gold)">${fmt(miscTotal)}</span></div><button onclick="toggleMisc()" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:none;border-top:1px solid var(--border);padding:8px 12px;cursor:pointer;margin-top:10px;font-family:inherit;border-radius:0 0 10px 10px"><span style="font-size:11px;color:var(--muted);font-weight:600">${misc.length} item${misc.length>1?'s':''}</span><span id="chev-misc" style="font-size:10px;color:var(--muted);transition:transform .25s;display:inline-block">&#9660;</span></button><div id="misc-entries" style="display:none;flex-direction:column;gap:5px;padding:8px 2px 4px">${rowsHtml}</div></div>`;
   }
   const mtr=document.getElementById('misc-total-row');
-  if(misc.length>0){mtr.style.display='block';mtr.innerHTML=`Misc total: <b style="color:var(--gold)">${fmt(miscTotal)}</b>`;}
-  else{mtr.style.display='none';}
+  mtr.style.display='none';
 
   const chartSec=document.getElementById('budget-chart-section');
   const allEntries=[];
@@ -1308,8 +1402,7 @@ function renderBills() {
   const list=document.getElementById('bills-list'); list.innerHTML='';
   bills.forEach((b,i)=>{
     const isFixed=FIXED_BILLS.find(f=>f.id===b.id);
-    const isOverridden=(md().billOverrides||{})[b.id]!==undefined;
-    list.innerHTML+=`<div class="card card-sm" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:start"><div style="display:flex;align-items:start;gap:10px;flex:1"><div style="width:10px;height:10px;border-radius:3px;background:${BILL_COLORS[i%BILL_COLORS.length]};flex-shrink:0;margin-top:4px"></div><div><div style="font-weight:600;font-size:14px">${b.name}</div><div style="font-size:11px;color:var(--muted);margin-top:1px">${b.category} · ${b.account}</div>${b.desc?`<div style="font-size:11px;color:var(--muted);margin-top:2px;font-style:italic">${b.desc}</div>`:''}${isOverridden?`<div style="font-size:10px;color:var(--gold);margin-top:2px">Modified this month</div>`:''}</div></div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:10px"><div style="font-size:15px;font-weight:700">${fmt(b.amount)}</div><button class="btn btn-sm" style="background:rgba(91,138,240,.2);color:var(--accent)" onclick="openEditBill(${b.id},'${b.name.replace(/'/g,"\\'")}',${b.amount})">✎</button>${!isFixed?`<button class="btn btn-red btn-sm" onclick="delBill(${b.id})">✕</button>`:''}</div></div></div>`;
+    list.innerHTML+=`<div class="card card-sm" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:start"><div style="display:flex;align-items:start;gap:10px;flex:1"><div style="width:10px;height:10px;border-radius:3px;background:${BILL_COLORS[i%BILL_COLORS.length]};flex-shrink:0;margin-top:4px"></div><div><div style="font-weight:600;font-size:14px">${b.name}</div><div style="font-size:11px;color:var(--muted);margin-top:1px">${b.category} · ${b.account}</div>${b.desc?`<div style="font-size:11px;color:var(--muted);margin-top:2px;font-style:italic">${b.desc}</div>`:''}</div></div><div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:10px"><div style="font-size:15px;font-weight:700">${fmt(b.amount)}</div><button class="btn btn-sm" style="background:rgba(91,138,240,.2);color:var(--accent)" onclick="openEditBill(${b.id},'${b.name.replace(/'/g,"\\'")}',${b.amount})">✎</button>${!isFixed?`<button class="btn btn-red btn-sm" onclick="delBill(${b.id})">✕</button>`:''}</div></div></div>`;
   });
 }
 
@@ -1319,8 +1412,7 @@ function renderSavings() {
   const list=document.getElementById('savings-list'); list.innerHTML='';
   FIXED_VAULTS.forEach(v=>{
     const amt=vaultAmount(v);
-    const isOverridden=(md().vaultOverrides||{})[v.id]!==undefined;
-    list.innerHTML+=`<div class="card card-sm" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="display:flex;align-items:center;gap:12px"><div style="width:10px;height:10px;border-radius:3px;background:${v.color};flex-shrink:0"></div><div><div style="font-weight:600;font-size:14px">${v.name}</div>${isOverridden?`<div style="font-size:10px;color:var(--gold);margin-top:1px">Modified this month</div>`:''}</div></div><div style="display:flex;align-items:center;gap:8px"><div style="font-size:16px;font-weight:800;color:${v.color}">${fmt(amt)}<span style="font-size:11px;color:var(--muted);font-weight:400">/mo</span></div><button class="btn btn-sm" style="background:rgba(61,214,140,.15);color:var(--green)" onclick="openEditVault(${v.id},'${v.name}',${amt})">✎</button></div></div>`;
+    list.innerHTML+=`<div class="card card-sm" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="display:flex;align-items:center;gap:12px"><div style="width:10px;height:10px;border-radius:3px;background:${v.color};flex-shrink:0"></div><div style="font-weight:600;font-size:14px">${v.name}</div></div><div style="display:flex;align-items:center;gap:8px"><div style="font-size:16px;font-weight:800;color:${v.color}">${fmt(amt)}<span style="font-size:11px;color:var(--muted);font-weight:400">/mo</span></div><button class="btn btn-sm" style="background:rgba(61,214,140,.15);color:var(--green)" onclick="openEditVault(${v.id},'${v.name}',${amt})">✎</button></div></div>`;
   });
 }
 
